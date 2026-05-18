@@ -1,0 +1,133 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+use Beljic\FitSdk\Export\GpxExporter;
+use Beljic\FitSdk\Parser\FitParser;
+
+$command = $argv[1] ?? 'help';
+$file    = $argv[2] ?? null;
+
+if ($command === 'help' || ($command !== 'help' && $file === null)) {
+    echo <<<HELP
+    php-fit-sdk CLI
+
+    Usage:
+      fit parse  <file.fit>   Parse FIT file and dump activity summary
+      fit info   <file.fit>   Show device info and session metadata
+      fit gpx    <file.fit>   Export activity to GPX (stdout)
+      fit help                Show this help
+
+    HELP;
+    exit(0);
+}
+
+if (!is_file($file)) {
+    fwrite(STDERR, "Error: file not found: {$file}\n");
+    exit(1);
+}
+
+$parser   = new FitParser();
+$activity = $parser->parseFile($file);
+
+match ($command) {
+    'parse' => (function () use ($activity): void {
+        echo "Created: " . $activity->createdAt->format('Y-m-d H:i:s') . "\n";
+        echo "Sessions: " . count($activity->sessions) . "\n";
+
+        foreach ($activity->sessions as $i => $session) {
+            echo "\nSession {$i}:\n";
+            echo "  Sport:     {$session->sport->name}\n";
+            echo "  Start:     " . $session->startTime->format('Y-m-d H:i:s') . "\n";
+            echo "  Distance:  " . round($session->totalDistance / 1000, 2) . " km\n";
+            echo "  Duration:  " . gmdate('H:i:s', $session->totalElapsedTime) . "\n";
+
+            if ($session->totalAscent !== null) {
+                echo "  Ascent:    " . round($session->totalAscent) . " m\n";
+            }
+            if ($session->totalDescent !== null) {
+                echo "  Descent:   " . round($session->totalDescent) . " m\n";
+            }
+
+            if ($session->avgHeartRate !== null) {
+                echo "  Avg HR:    {$session->avgHeartRate} bpm";
+                if ($session->maxHeartRate !== null) {
+                    echo " (max {$session->maxHeartRate})";
+                }
+                echo "\n";
+            }
+
+            if ($session->avgSpeed !== null && $session->avgSpeed > 0) {
+                $kmh  = round($session->avgSpeed * 3.6, 1);
+                $pace = $session->avgSpeed > 0 ? gmdate('i:s', (int) (1000 / $session->avgSpeed)) : null;
+                echo "  Avg speed: {$kmh} km/h";
+                if ($pace !== null) {
+                    echo " ({$pace} /km)";
+                }
+                echo "\n";
+            }
+
+            if ($session->avgPower !== null) {
+                echo "  Avg power: " . round($session->avgPower) . " W";
+                if ($session->maxPower !== null) {
+                    echo " (max " . round($session->maxPower) . ")";
+                }
+                echo "\n";
+            }
+
+            if ($session->avgCadence !== null) {
+                echo "  Avg cad:   {$session->avgCadence} spm\n";
+            }
+
+            // GPS bounds from records
+            $lats = $lons = [];
+            $startLat = $startLon = null;
+            foreach ($session->records as $r) {
+                if ($r->lat === null || $r->lon === null) {
+                    continue;
+                }
+                if ($startLat === null) {
+                    $startLat = $r->lat;
+                    $startLon = $r->lon;
+                }
+                $lats[] = $r->lat;
+                $lons[] = $r->lon;
+            }
+
+            if ($startLat !== null) {
+                echo "  Start GPS: " . number_format($startLat, 5) . ", " . number_format($startLon, 5) . "\n";
+                echo "  GPS bounds: "
+                    . number_format(min($lats), 5) . "," . number_format(min($lons), 5)
+                    . " → "
+                    . number_format(max($lats), 5) . "," . number_format(max($lons), 5) . "\n";
+            }
+
+            echo "  Records:   " . count($session->records) . "\n";
+            echo "  Laps:      " . count($session->laps) . "\n";
+        }
+    })(),
+
+    'info' => (function () use ($activity): void {
+        $d = $activity->device;
+        if ($d === null) {
+            echo "No device info found.\n";
+            return;
+        }
+        echo "Manufacturer:     {$d->manufacturer->name}\n";
+        echo "Product:          " . ($d->productName ?? '—') . "\n";
+        echo "Serial:           " . ($d->serialNumber ?? '—') . "\n";
+        echo "Software version: " . ($d->softwareVersion ?? '—') . "\n";
+    })(),
+
+    'gpx' => (function () use ($activity): void {
+        echo (new GpxExporter())->export($activity);
+    })(),
+
+    default => (function () use ($command): void {
+        fwrite(STDERR, "Unknown command: {$command}\n");
+        exit(1);
+    })(),
+};
