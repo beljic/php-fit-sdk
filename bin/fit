@@ -5,33 +5,47 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
+use Beljic\FitSdk\Export\ExportOptions;
 use Beljic\FitSdk\Export\GpxExporter;
 use Beljic\FitSdk\Parser\FitParser;
 
 $command = $argv[1] ?? 'help';
-$file    = $argv[2] ?? null;
+$file  = null;
+$flags = [];
+foreach (array_slice($argv, 2) as $arg) {
+    if (str_starts_with($arg, '--')) {
+        [$key, $value] = array_pad(explode('=', ltrim($arg, '-'), 2), 2, true);
+        $flags[$key]   = $value;
+    } elseif ($file === null) {
+        $file = $arg;
+    }
+}
 
-if ($command === 'help' || ($command !== 'help' && $file === null)) {
+if ($command === 'help' || ($command !== 'help' && $command !== 'bulk' && $file === null)) {
     echo <<<HELP
     php-fit-sdk CLI
 
     Usage:
-      fit parse  <file.fit>   Parse FIT file and dump activity summary
-      fit info   <file.fit>   Show device info and session metadata
-      fit gpx    <file.fit>   Export activity to GPX (stdout)
-      fit help                Show this help
+      fit parse  <file.fit>                         Parse FIT file and dump activity summary
+      fit info   <file.fit>                         Show device info and session metadata
+      fit gpx    <file.fit> [--route-only] [--out=<output.gpx>]
+                                                    Export to GPX (stdout or file)
+      fit bulk   <input-dir> --out=<output-dir> [--with-sensors]
+                                                    Batch convert *.fit in a directory
+      fit help                                      Show this help
 
     HELP;
     exit(0);
 }
 
-if (!is_file($file)) {
-    fwrite(STDERR, "Error: file not found: {$file}\n");
-    exit(1);
+if ($command !== 'bulk') {
+    if ($file === null || !is_file($file)) {
+        fwrite(STDERR, 'Error: file not found: ' . ($file ?? '(none)') . "\n");
+        exit(1);
+    }
+    $parser   = new FitParser();
+    $activity = $parser->parseFile($file);
 }
-
-$parser   = new FitParser();
-$activity = $parser->parseFile($file);
 
 match ($command) {
     'parse' => (function () use ($activity): void {
@@ -122,8 +136,16 @@ match ($command) {
         echo "Software version: " . ($d->softwareVersion ?? '—') . "\n";
     })(),
 
-    'gpx' => (function () use ($activity): void {
-        echo (new GpxExporter())->export($activity);
+    'gpx' => (function () use ($activity, $flags): void {
+        $options  = new ExportOptions(routeOnly: isset($flags['route-only']));
+        $exporter = new GpxExporter();
+
+        if (isset($flags['out'])) {
+            $exporter->exportToFile($activity, $flags['out'], $options);
+            fwrite(STDERR, "Saved to {$flags['out']}\n");
+        } else {
+            echo $exporter->export($activity, $options);
+        }
     })(),
 
     default => (function () use ($command): void {
