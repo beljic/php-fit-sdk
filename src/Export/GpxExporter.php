@@ -10,7 +10,7 @@ use Beljic\FitSdk\Data\Session;
 
 final class GpxExporter
 {
-    public function export(Activity $activity): string
+    public function export(Activity $activity, ExportOptions $options = new ExportOptions()): string
     {
         $dom = new \DOMDocument('1.0', 'UTF-8');
         $dom->formatOutput = true;
@@ -37,13 +37,13 @@ final class GpxExporter
         $gpx->appendChild($meta);
 
         foreach ($activity->sessions as $session) {
-            $gpx->appendChild($this->buildTrack($dom, $session));
+            $gpx->appendChild($this->buildTrack($dom, $session, $options));
         }
 
         return $dom->saveXML() ?: '';
     }
 
-    private function buildTrack(\DOMDocument $dom, Session $session): \DOMElement
+    private function buildTrack(\DOMDocument $dom, Session $session, ExportOptions $options): \DOMElement
     {
         $trk = $dom->createElement('trk');
         $trk->appendChild($dom->createElement('name', $session->sport->name . ' ' . $session->startTime->format('Y-m-d H:i')));
@@ -55,7 +55,7 @@ final class GpxExporter
             if ($record->lat === null || $record->lon === null) {
                 continue;
             }
-            $seg->appendChild($this->buildTrackPoint($dom, $record));
+            $seg->appendChild($this->buildTrackPoint($dom, $record, $options));
         }
 
         $trk->appendChild($seg);
@@ -63,7 +63,7 @@ final class GpxExporter
         return $trk;
     }
 
-    private function buildTrackPoint(\DOMDocument $dom, Record $record): \DOMElement
+    private function buildTrackPoint(\DOMDocument $dom, Record $record, ExportOptions $options): \DOMElement
     {
         $pt = $dom->createElement('trkpt');
         $pt->setAttribute('lat', number_format($record->lat, 7, '.', ''));
@@ -75,10 +75,10 @@ final class GpxExporter
 
         $pt->appendChild($dom->createElement('time', $record->timestamp->format(\DateTimeInterface::ATOM)));
 
-        $hasExtension = $record->heartRate !== null || $record->cadence !== null;
+        $hasExtension = !$options->routeOnly && ($record->heartRate !== null || $record->cadence !== null);
         if ($hasExtension) {
             $extensions = $dom->createElement('extensions');
-            $tpx = $dom->createElementNS(
+            $tpx        = $dom->createElementNS(
                 'http://www.garmin.com/xmlschemas/TrackPointExtension/v1',
                 'gpxtpx:TrackPointExtension',
             );

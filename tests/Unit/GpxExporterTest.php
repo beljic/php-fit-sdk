@@ -133,6 +133,42 @@ final class GpxExporterTest extends TestCase
         self::assertSame(0, $xpath->query('//g:trk')->length);
     }
 
+    public function testRouteOnlyExcludesExtensions(): void
+    {
+        $options  = new \Beljic\FitSdk\Export\ExportOptions(routeOnly: true);
+        $activity = $this->makeActivity();
+        $gpx      = $this->exporter->export($activity, $options);
+
+        self::assertStringNotContainsString('gpxtpx:hr', $gpx);
+        self::assertStringNotContainsString('gpxtpx:cad', $gpx);
+        self::assertStringNotContainsString('extensions', $gpx);
+    }
+
+    public function testRouteOnlyPreservesGeometry(): void
+    {
+        $options  = new \Beljic\FitSdk\Export\ExportOptions(routeOnly: true);
+        $activity = $this->makeActivity();
+        $doc      = $this->loadXml($this->exporter->export($activity, $options));
+        $xpath    = new \DOMXPath($doc);
+        $xpath->registerNamespace('g', 'http://www.topografix.com/GPX/1/1');
+
+        $pt = $xpath->query('//g:trkpt')->item(0);
+        self::assertNotNull($pt);
+        self::assertNotEmpty($pt->getAttribute('lat'));
+        self::assertNotEmpty($pt->getAttribute('lon'));
+        self::assertGreaterThan(0, $xpath->query('//g:ele')->length);
+        self::assertGreaterThan(0, $xpath->query('//g:time')->length);
+    }
+
+    public function testDefaultOptionsPreservesExtensions(): void
+    {
+        // Calling export() without options must still include HR/cadence (backwards compat)
+        $gpx = $this->exporter->export($this->makeActivity());
+
+        self::assertStringContainsString('gpxtpx:hr', $gpx);
+        self::assertStringContainsString('gpxtpx:cad', $gpx);
+    }
+
     // --- Helpers ---
 
     private function makeActivity(
