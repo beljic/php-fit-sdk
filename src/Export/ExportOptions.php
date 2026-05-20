@@ -7,6 +7,6 @@ namespace Beljic\FitSdk\Export;
 final readonly class ExportOptions
 {
     public function __construct(
-        public bool $routeOnly = false,
+        public bool $routeOnly = false, // false = full export (HR, cadence); true = geometry only
     ) {}
 }
