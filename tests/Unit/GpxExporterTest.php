@@ -7,6 +7,7 @@ namespace Beljic\FitSdk\Tests\Unit;
 use Beljic\FitSdk\Data\Activity;
 use Beljic\FitSdk\Data\Record;
 use Beljic\FitSdk\Data\Session;
+use Beljic\FitSdk\Export\ExportOptions;
 use Beljic\FitSdk\Export\GpxExporter;
 use Beljic\FitSdk\Profile\Sport;
 use PHPUnit\Framework\TestCase;
@@ -135,7 +136,7 @@ final class GpxExporterTest extends TestCase
 
     public function testRouteOnlyExcludesExtensions(): void
     {
-        $options  = new \Beljic\FitSdk\Export\ExportOptions(routeOnly: true);
+        $options  = new ExportOptions(routeOnly: true);
         $activity = $this->makeActivity();
         $gpx      = $this->exporter->export($activity, $options);
 
@@ -146,7 +147,7 @@ final class GpxExporterTest extends TestCase
 
     public function testRouteOnlyPreservesGeometry(): void
     {
-        $options  = new \Beljic\FitSdk\Export\ExportOptions(routeOnly: true);
+        $options  = new ExportOptions(routeOnly: true);
         $activity = $this->makeActivity();
         $doc      = $this->loadXml($this->exporter->export($activity, $options));
         $xpath    = new \DOMXPath($doc);
