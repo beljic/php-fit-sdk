@@ -148,6 +148,52 @@ match ($command) {
         }
     })(),
 
+    'bulk' => (function () use ($file, $flags): void {
+        if ($file === null || !isset($flags['out'])) {
+            fwrite(STDERR, "Usage: fit bulk <input-dir> --out=<output-dir> [--with-sensors]\n");
+            exit(1);
+        }
+
+        if (!is_dir($file)) {
+            fwrite(STDERR, "Error: not a directory: {$file}\n");
+            exit(1);
+        }
+
+        $inputDir  = rtrim($file, '/');
+        $outputDir = rtrim($flags['out'], '/');
+        $options   = new ExportOptions(routeOnly: !isset($flags['with-sensors']));
+        $fitFiles  = glob($inputDir . '/*.fit') ?: [];
+
+        if ($fitFiles === []) {
+            echo "No .fit files found in {$inputDir}\n";
+            exit(0);
+        }
+
+        $total    = count($fitFiles);
+        $failed   = 0;
+        $parser   = new FitParser();
+        $exporter = new GpxExporter();
+
+        foreach ($fitFiles as $i => $fitFile) {
+            $basename = basename($fitFile, '.fit');
+            $outPath  = $outputDir . '/' . $basename . '.gpx';
+            $label    = '[' . ($i + 1) . "/{$total}] " . basename($fitFile);
+
+            try {
+                $act = $parser->parseFile($fitFile);
+                $exporter->exportToFile($act, $outPath, $options);
+                echo "{$label} → OK\n";
+            } catch (\Throwable $e) {
+                echo "{$label} → FAILED: {$e->getMessage()}\n";
+                $failed++;
+            }
+        }
+
+        $exported = $total - $failed;
+        echo "\nDone. {$exported} exported, {$failed} failed.\n";
+        exit($failed > 0 ? 1 : 0);
+    })(),
+
     default => (function () use ($command): void {
         fwrite(STDERR, "Unknown command: {$command}\n");
         exit(1);
