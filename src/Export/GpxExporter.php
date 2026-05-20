@@ -43,6 +43,19 @@ final class GpxExporter
         return $dom->saveXML() ?: '';
     }
 
+    public function exportToFile(Activity $activity, string $path, ExportOptions $options = new ExportOptions()): void
+    {
+        $dir = dirname($path);
+
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            throw new \RuntimeException("Cannot create directory: {$dir}");
+        }
+
+        if (file_put_contents($path, $this->export($activity, $options)) === false) {
+            throw new \RuntimeException("Failed to write GPX file: {$path}");
+        }
+    }
+
     private function buildTrack(\DOMDocument $dom, Session $session, ExportOptions $options): \DOMElement
     {
         $trk = $dom->createElement('trk');

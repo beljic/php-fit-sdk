@@ -170,6 +170,40 @@ final class GpxExporterTest extends TestCase
         self::assertStringContainsString('gpxtpx:cad', $gpx);
     }
 
+    public function testExportToFileWritesValidGpx(): void
+    {
+        $path = sys_get_temp_dir() . '/fit-sdk-test-' . uniqid() . '.gpx';
+
+        $this->exporter->exportToFile($this->makeActivity(), $path);
+
+        self::assertFileExists($path);
+        $doc = new \DOMDocument();
+        self::assertTrue($doc->loadXML((string) file_get_contents($path)));
+
+        unlink($path);
+    }
+
+    public function testExportToFileCreatesDirectory(): void
+    {
+        $dir  = sys_get_temp_dir() . '/fit-sdk-test-' . uniqid();
+        $path = $dir . '/output.gpx';
+
+        $this->exporter->exportToFile($this->makeActivity(), $path);
+
+        self::assertFileExists($path);
+
+        unlink($path);
+        rmdir($dir);
+    }
+
+    public function testExportToFileThrowsOnUnwritablePath(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        // /nonexistent root means mkdir will fail
+        $this->exporter->exportToFile($this->makeActivity(), '/nonexistent/deep/path/out.gpx');
+    }
+
     // --- Helpers ---
 
     private function makeActivity(
