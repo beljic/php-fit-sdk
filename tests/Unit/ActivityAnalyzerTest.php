@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Beljic\FitSdk\Tests\Unit;
 
+use Beljic\FitSdk\Analysis\LapStats;
 use Beljic\FitSdk\Analysis\RouteBounds;
 use Beljic\FitSdk\Analysis\RoutePoint;
 use Beljic\FitSdk\Analysis\SensorPresence;
+use Beljic\FitSdk\Data\Lap;
 use PHPUnit\Framework\TestCase;
 
 final class ActivityAnalyzerTest extends TestCase
@@ -59,5 +61,58 @@ final class ActivityAnalyzerTest extends TestCase
         self::assertFalse($sensors->hasPower);
         self::assertFalse($sensors->hasTemperature);
         self::assertTrue($sensors->hasDeveloperFields);
+    }
+
+    public function testLapStatsFromLapComputesPace(): void
+    {
+        $lap = new Lap(
+            startTime: new \DateTimeImmutable('2024-06-15T08:00:00+00:00'),
+            endTime: new \DateTimeImmutable('2024-06-15T08:05:00+00:00'),
+            totalDistance: 1000.0,
+            totalElapsedTime: 300,
+            totalTimerTime: 295,
+            avgHeartRate: 155,
+            maxHeartRate: 172,
+            avgSpeed: 3.38,
+            maxSpeed: 4.1,
+            avgPower: null,
+            maxPower: null,
+            avgCadence: 88,
+            totalAscent: 5.0,
+            totalDescent: 3.0,
+            lapNumber: 1,
+        );
+
+        $stats = LapStats::fromLap($lap);
+
+        self::assertSame(1, $stats->lapNumber);
+        self::assertSame(1000.0, $stats->totalDistance);
+        self::assertSame(295, $stats->movingTime);
+        self::assertSame(155, $stats->avgHeartRate);
+        // pace = 295s / 1.0km = 295 s/km
+        self::assertEqualsWithDelta(295.0, $stats->pace, 0.01);
+    }
+
+    public function testLapStatsPaceIsNullWhenDistanceIsZero(): void
+    {
+        $lap = new Lap(
+            startTime: new \DateTimeImmutable('2024-06-15T08:00:00+00:00'),
+            endTime: new \DateTimeImmutable('2024-06-15T08:00:10+00:00'),
+            totalDistance: 0.0,
+            totalElapsedTime: 10,
+            totalTimerTime: 10,
+            avgHeartRate: null,
+            maxHeartRate: null,
+            avgSpeed: null,
+            maxSpeed: null,
+            avgPower: null,
+            maxPower: null,
+            avgCadence: null,
+            totalAscent: null,
+            totalDescent: null,
+            lapNumber: 1,
+        );
+
+        self::assertNull(LapStats::fromLap($lap)->pace);
     }
 }
