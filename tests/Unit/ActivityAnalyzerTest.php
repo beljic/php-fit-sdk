@@ -6,6 +6,7 @@ namespace Beljic\FitSdk\Tests\Unit;
 
 use Beljic\FitSdk\Analysis\RouteBounds;
 use Beljic\FitSdk\Analysis\RoutePoint;
+use Beljic\FitSdk\Analysis\SensorPresence;
 use PHPUnit\Framework\TestCase;
 
 final class ActivityAnalyzerTest extends TestCase
@@ -39,5 +40,23 @@ final class ActivityAnalyzerTest extends TestCase
         $point = new RoutePoint(lat: 44.8125, lon: 20.4612);
 
         self::assertNull($point->altitude);
+    }
+
+    public function testSensorPresenceFlagsAreReadable(): void
+    {
+        $sensors = new SensorPresence(
+            hasGps: true,
+            hasHeartRate: true,
+            hasCadence: false,
+            hasPower: false,
+            hasTemperature: false,
+            hasDeveloperFields: true,
+        );
+
+        self::assertTrue($sensors->hasGps);
+        self::assertTrue($sensors->hasHeartRate);
+        self::assertFalse($sensors->hasCadence);
+        self::assertFalse($sensors->hasPower);
+        self::assertTrue($sensors->hasDeveloperFields);
     }
 }
