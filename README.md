@@ -15,6 +15,8 @@ FIT (Flexible and Interoperable Data Transfer) is Garmin's binary format used by
 - Parse FIT files from **Garmin, Wahoo, Polar, Decathlon/Kiprun** and any FIT-compatible device
 - Extracts **GPS track, heart rate, cadence, speed, power, temperature**
 - Supports **developer fields** (running dynamics: Form Power, Leg Spring Stiffness, Air Power, Impact Loading Rate, Effort Pace)
+- **FIT → GPX export** with Garmin HR/cadence extensions, route-only mode, batch conversion
+- **Activity analysis** — normalized stats, bounds, sensor presence, lap summaries, route sampling
 - Fully typed, **immutable value objects** — no setters, no surprises
 - **Zero framework dependencies** — works in Laravel, Magento, Symfony, or plain PHP
 - PHP 8.3+ — readonly classes, enums, strict types throughout
@@ -74,6 +76,72 @@ use Beljic\FitSdk\Source\StringSource;
 
 $binary   = file_get_contents('php://input'); // or from $_FILES
 $activity = (new FitParser())->parse(new StringSource($binary));
+```
+
+---
+
+## Activity Analysis
+
+`ActivityAnalyzer` computes normalized stats from a parsed `Activity` — no manual aggregation needed:
+
+```php
+use Beljic\FitSdk\Analysis\ActivityAnalyzer;
+
+$activity = (new FitParser())->parseFile('my_run.fit');
+$stats    = (new ActivityAnalyzer())->analyze($activity);
+
+// Aggregated stats
+echo round($stats->totalDistance / 1000, 2);   // 10.52 (km)
+echo gmdate('H:i:s', $stats->movingTime);       // 00:51:20
+echo $stats->avgHeartRate;                       // 158 bpm
+echo round($stats->pace / 60, 2);               // 5.12 min/km
+
+// Geographic bounds (for map viewport)
+$bounds = $stats->bounds;
+echo "{$bounds->minLat},{$bounds->minLon},{$bounds->maxLat},{$bounds->maxLon}";
+$center = $bounds->center(); // ['lat' => ..., 'lon' => ...]
+
+// Which sensors contributed data?
+echo $stats->sensors->hasHeartRate;      // true
+echo $stats->sensors->hasPower;          // false
+echo $stats->sensors->hasDeveloperFields; // true
+
+// Per-lap breakdown
+foreach ($stats->laps as $lap) {
+    echo "Lap {$lap->lapNumber}: " . round($lap->totalDistance / 1000, 2) . " km";
+    echo " | Pace: " . gmdate('i:s', (int) $lap->pace) . " /km";
+}
+```
+
+### Downsampled route for web maps
+
+```php
+// Returns at most 500 RoutePoint objects (lat/lon/altitude), always includes first and last
+$route = (new ActivityAnalyzer())->sampleRoute($activity, maxPoints: 500);
+
+$points = array_map(fn($p) => [$p->lat, $p->lon], $route);
+// Pass $points to Leaflet, Mapbox, Google Maps, etc.
+```
+
+---
+
+## GPX Export
+
+```php
+use Beljic\FitSdk\Export\GpxExporter;
+use Beljic\FitSdk\Export\ExportOptions;
+
+$activity = (new FitParser())->parseFile('my_run.fit');
+$exporter = new GpxExporter();
+
+// Export to string (with HR + cadence Garmin extensions)
+$gpx = $exporter->export($activity);
+
+// Export route only (no sensor data, smaller file)
+$gpx = $exporter->export($activity, new ExportOptions(routeOnly: true));
+
+// Export directly to file
+$exporter->exportToFile($activity, '/path/to/output.gpx');
 ```
 
 ---
@@ -232,6 +300,21 @@ All other message types are silently skipped (YAGNI).
 
 # Show device info
 ./bin/fit info my_run.fit
+
+# Export single FIT to GPX (stdout)
+./bin/fit gpx my_run.fit
+
+# Export route only (no HR/cadence extensions)
+./bin/fit gpx my_run.fit --route-only
+
+# Export to file
+./bin/fit gpx my_run.fit --out=output.gpx
+
+# Batch convert a directory of FIT files to GPX
+./bin/fit bulk /path/to/fits --out=/path/to/gpx
+
+# Batch with HR/cadence sensor data
+./bin/fit bulk /path/to/fits --out=/path/to/gpx --with-sensors
 ```
 
 Example output:
@@ -308,6 +391,8 @@ class FitActivityParser
 
 - [x] FIT binary parser (records, laps, sessions, device info)
 - [x] Developer fields (running dynamics)
+- [x] FIT → GPX export with Garmin extensions and batch CLI
+- [x] Activity analysis — stats, bounds, sensor presence, route sampling
 - [ ] HRV data (Heart Rate Variability intervals)
 - [ ] Workout structure (planned workout steps)
 - [ ] Multi-sport / triathlon session handling
