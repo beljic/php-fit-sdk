@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Beljic\FitSdk\Tests\Unit;
 
+use Beljic\FitSdk\Analysis\ActivityStats;
 use Beljic\FitSdk\Analysis\LapStats;
 use Beljic\FitSdk\Analysis\RouteBounds;
 use Beljic\FitSdk\Analysis\RoutePoint;
 use Beljic\FitSdk\Analysis\SensorPresence;
 use Beljic\FitSdk\Data\Lap;
+use Beljic\FitSdk\Profile\Sport;
 use PHPUnit\Framework\TestCase;
 
 final class ActivityAnalyzerTest extends TestCase
@@ -114,5 +116,44 @@ final class ActivityAnalyzerTest extends TestCase
         );
 
         self::assertNull(LapStats::fromLap($lap)->pace);
+    }
+
+    public function testActivityStatsIsConstructibleAndReadable(): void
+    {
+        $stats = new ActivityStats(
+            sport: Sport::Running,
+            startTime: new \DateTimeImmutable('2024-06-15T08:00:00+00:00'),
+            endTime: new \DateTimeImmutable('2024-06-15T09:00:00+00:00'),
+            sessionCount: 1,
+            totalDistance: 10000.0,
+            duration: 3600,
+            movingTime: 3540,
+            pace: 354.0,
+            avgHeartRate: 158,
+            maxHeartRate: 178,
+            avgSpeed: 2.82,
+            maxSpeed: 4.2,
+            avgPower: null,
+            maxPower: null,
+            avgCadence: 89,
+            totalAscent: 120.0,
+            totalDescent: 118.0,
+            bounds: null,
+            laps: [],
+            sensors: new SensorPresence(
+                hasGps: true,
+                hasHeartRate: true,
+                hasCadence: true,
+                hasPower: false,
+                hasTemperature: false,
+                hasDeveloperFields: false,
+            ),
+        );
+
+        self::assertSame(Sport::Running, $stats->sport);
+        self::assertSame(10000.0, $stats->totalDistance);
+        self::assertSame(3540, $stats->movingTime);
+        self::assertEqualsWithDelta(354.0, $stats->pace, 0.01);
+        self::assertTrue($stats->sensors->hasGps);
     }
 }
