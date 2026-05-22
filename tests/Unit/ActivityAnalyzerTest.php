@@ -57,6 +57,7 @@ final class ActivityAnalyzerTest extends TestCase
         self::assertTrue($sensors->hasHeartRate);
         self::assertFalse($sensors->hasCadence);
         self::assertFalse($sensors->hasPower);
+        self::assertFalse($sensors->hasTemperature);
         self::assertTrue($sensors->hasDeveloperFields);
     }
 }
