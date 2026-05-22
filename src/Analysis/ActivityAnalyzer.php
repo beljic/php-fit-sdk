@@ -148,4 +148,51 @@ final class ActivityAnalyzer
 
         return new SensorPresence($hasGps, $hasHr, $hasCadence, $hasPower, $hasTemp, $hasDev);
     }
+
+    /**
+     * Returns a downsampled route for web map rendering.
+     * Keeps every Nth GPS point so total count ≤ $maxPoints.
+     * Always includes first and last GPS point.
+     *
+     * @return RoutePoint[]
+     */
+    public function sampleRoute(Activity $activity, int $maxPoints = 500): array
+    {
+        $gpsRecords = [];
+
+        foreach ($activity->sessions as $session) {
+            foreach ($session->records as $record) {
+                if ($record->lat !== null && $record->lon !== null) {
+                    $gpsRecords[] = $record;
+                }
+            }
+        }
+
+        $total = count($gpsRecords);
+
+        if ($total === 0) {
+            return [];
+        }
+
+        if ($total <= $maxPoints) {
+            $result = [];
+            foreach ($gpsRecords as $record) {
+                $result[] = new RoutePoint($record->lat, $record->lon, $record->altitude);
+            }
+            return $result;
+        }
+
+        $step   = (int) ceil($total / ($maxPoints - 1));
+        $result = [];
+
+        for ($i = 0; $i < $total - 1; $i += $step) {
+            $r        = $gpsRecords[$i];
+            $result[] = new RoutePoint($r->lat, $r->lon, $r->altitude);
+        }
+
+        $last = $gpsRecords[$total - 1];
+        $result[] = new RoutePoint($last->lat, $last->lon, $last->altitude);
+
+        return $result;
+    }
 }

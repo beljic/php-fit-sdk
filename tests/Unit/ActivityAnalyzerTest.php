@@ -346,4 +346,67 @@ final class ActivityAnalyzerTest extends TestCase
             temperature: null,
         );
     }
+
+    public function testSampleRouteReturnsAllPointsWhenBelowMax(): void
+    {
+        $records = [
+            $this->makeRecord(lat: 44.80, lon: 20.40),
+            $this->makeRecord(lat: 44.81, lon: 20.41),
+            $this->makeRecord(lat: 44.82, lon: 20.42),
+        ];
+        $session  = $this->makeSession(records: $records);
+        $activity = new Activity(
+            createdAt: new \DateTimeImmutable(),
+            device: null,
+            sessions: [$session],
+        );
+
+        $route = (new ActivityAnalyzer())->sampleRoute($activity, maxPoints: 10);
+
+        self::assertCount(3, $route);
+        self::assertEqualsWithDelta(44.80, $route[0]->lat, 0.0001);
+        self::assertEqualsWithDelta(44.82, $route[2]->lat, 0.0001);
+    }
+
+    public function testSampleRouteDownsamplesWhenAboveMax(): void
+    {
+        $records = [];
+        for ($i = 0; $i < 100; $i++) {
+            $records[] = $this->makeRecord(lat: 44.80 + $i * 0.001, lon: 20.40);
+        }
+        $session  = $this->makeSession(records: $records);
+        $activity = new Activity(
+            createdAt: new \DateTimeImmutable(),
+            device: null,
+            sessions: [$session],
+        );
+
+        $route = (new ActivityAnalyzer())->sampleRoute($activity, maxPoints: 10);
+
+        self::assertLessThanOrEqual(10, count($route));
+        self::assertGreaterThan(0, count($route));
+        // first and last points must always be included
+        self::assertEqualsWithDelta(44.800, $route[0]->lat, 0.0001);
+        self::assertEqualsWithDelta(44.899, $route[count($route) - 1]->lat, 0.0001);
+    }
+
+    public function testSampleRouteSkipsRecordsWithoutGps(): void
+    {
+        $records = [
+            $this->makeRecord(lat: null, lon: null),
+            $this->makeRecord(lat: 44.81, lon: 20.41),
+            $this->makeRecord(lat: null, lon: null),
+        ];
+        $session  = $this->makeSession(records: $records);
+        $activity = new Activity(
+            createdAt: new \DateTimeImmutable(),
+            device: null,
+            sessions: [$session],
+        );
+
+        $route = (new ActivityAnalyzer())->sampleRoute($activity);
+
+        self::assertCount(1, $route);
+        self::assertEqualsWithDelta(44.81, $route[0]->lat, 0.0001);
+    }
 }
