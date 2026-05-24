@@ -6,12 +6,17 @@ namespace Beljic\FitSdk\Analysis;
 
 use Beljic\FitSdk\Data\Activity;
 use Beljic\FitSdk\Data\Session;
+use Beljic\FitSdk\Exception\CannotAnalyzeActivityException;
 
 final class ActivityAnalyzer
 {
     public function analyze(Activity $activity): ActivityStats
     {
         $sessions = $activity->sessions;
+
+        if ($sessions === []) {
+            throw new CannotAnalyzeActivityException('Cannot analyze an Activity with no sessions.');
+        }
 
         $totalDistance = 0.0;
         $totalDuration = 0;

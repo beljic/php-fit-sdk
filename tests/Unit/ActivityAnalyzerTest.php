@@ -14,6 +14,7 @@ use Beljic\FitSdk\Data\Activity;
 use Beljic\FitSdk\Data\Lap;
 use Beljic\FitSdk\Data\Record;
 use Beljic\FitSdk\Data\Session;
+use Beljic\FitSdk\Exception\CannotAnalyzeActivityException;
 use Beljic\FitSdk\Profile\Sport;
 use PHPUnit\Framework\TestCase;
 
@@ -293,6 +294,12 @@ final class ActivityAnalyzerTest extends TestCase
         self::assertCount(1, $stats->laps);
         self::assertSame(1, $stats->laps[0]->lapNumber);
         self::assertSame(1000.0, $stats->laps[0]->totalDistance);
+    }
+
+    public function testAnalyzeThrowsWhenActivityHasNoSessions(): void
+    {
+        $this->expectException(CannotAnalyzeActivityException::class);
+        (new ActivityAnalyzer())->analyze(new Activity(new \DateTimeImmutable(), null, []));
     }
 
     // --- helpers ---
