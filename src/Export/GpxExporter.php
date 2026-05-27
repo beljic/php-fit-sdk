@@ -47,7 +47,7 @@ final class GpxExporter
     {
         $dir = dirname($path);
 
-        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+        if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
             throw new \RuntimeException("Cannot create directory: {$dir}");
         }
 
