@@ -163,6 +163,10 @@ final class ActivityAnalyzer
      */
     public function sampleRoute(Activity $activity, int $maxPoints = 500): array
     {
+        if ($maxPoints < 2) {
+            throw new \InvalidArgumentException('maxPoints must be at least 2.');
+        }
+
         $gpsRecords = [];
 
         foreach ($activity->sessions as $session) {

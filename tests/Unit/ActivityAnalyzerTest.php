@@ -416,4 +416,34 @@ final class ActivityAnalyzerTest extends TestCase
         self::assertCount(1, $route);
         self::assertEqualsWithDelta(44.81, $route[0]->lat, 0.0001);
     }
+
+    public function testSampleRouteThrowsWhenMaxPointsIsZero(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        (new ActivityAnalyzer())->sampleRoute($this->makeActivity(), maxPoints: 0);
+    }
+
+    public function testSampleRouteThrowsWhenMaxPointsIsOne(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        (new ActivityAnalyzer())->sampleRoute($this->makeActivity(), maxPoints: 1);
+    }
+
+    public function testSampleRouteAcceptsMaxPointsOfTwo(): void
+    {
+        // Should not throw
+        $result = (new ActivityAnalyzer())->sampleRoute($this->makeActivity(), maxPoints: 2);
+        self::assertIsArray($result);
+    }
+
+    // --- private helpers ---
+
+    private function makeActivity(): Activity
+    {
+        return new Activity(
+            createdAt: new \DateTimeImmutable(),
+            device: null,
+            sessions: [$this->makeSession(records: [$this->makeRecord()])],
+        );
+    }
 }
