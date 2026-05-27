@@ -14,6 +14,7 @@ use Beljic\FitSdk\Data\Activity;
 use Beljic\FitSdk\Data\Lap;
 use Beljic\FitSdk\Data\Record;
 use Beljic\FitSdk\Data\Session;
+use Beljic\FitSdk\Exception\CannotAnalyzeActivityException;
 use Beljic\FitSdk\Profile\Sport;
 use PHPUnit\Framework\TestCase;
 
@@ -295,6 +296,12 @@ final class ActivityAnalyzerTest extends TestCase
         self::assertSame(1000.0, $stats->laps[0]->totalDistance);
     }
 
+    public function testAnalyzeThrowsWhenActivityHasNoSessions(): void
+    {
+        $this->expectException(CannotAnalyzeActivityException::class);
+        (new ActivityAnalyzer())->analyze(new Activity(new \DateTimeImmutable(), null, []));
+    }
+
     // --- helpers ---
 
     private function makeSession(
@@ -408,5 +415,35 @@ final class ActivityAnalyzerTest extends TestCase
 
         self::assertCount(1, $route);
         self::assertEqualsWithDelta(44.81, $route[0]->lat, 0.0001);
+    }
+
+    public function testSampleRouteThrowsWhenMaxPointsIsZero(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        (new ActivityAnalyzer())->sampleRoute($this->makeActivity(), maxPoints: 0);
+    }
+
+    public function testSampleRouteThrowsWhenMaxPointsIsOne(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        (new ActivityAnalyzer())->sampleRoute($this->makeActivity(), maxPoints: 1);
+    }
+
+    public function testSampleRouteAcceptsMaxPointsOfTwo(): void
+    {
+        // Should not throw
+        $result = (new ActivityAnalyzer())->sampleRoute($this->makeActivity(), maxPoints: 2);
+        self::assertIsArray($result);
+    }
+
+    // --- private helpers ---
+
+    private function makeActivity(): Activity
+    {
+        return new Activity(
+            createdAt: new \DateTimeImmutable(),
+            device: null,
+            sessions: [$this->makeSession(records: [$this->makeRecord()])],
+        );
     }
 }

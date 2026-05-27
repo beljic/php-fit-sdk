@@ -20,7 +20,7 @@ FIT (Flexible and Interoperable Data Transfer) is Garmin's binary format used by
 - Fully typed, **immutable value objects** — no setters, no surprises
 - **Zero framework dependencies** — works in Laravel, Magento, Symfony, or plain PHP
 - PHP 8.3+ — readonly classes, enums, strict types throughout
-- Pluggable input via `SourceInterface` — file path, binary string, stream
+- Pluggable input via `SourceInterface` — file path, binary string
 
 ---
 

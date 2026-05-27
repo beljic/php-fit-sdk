@@ -6,12 +6,17 @@ namespace Beljic\FitSdk\Analysis;
 
 use Beljic\FitSdk\Data\Activity;
 use Beljic\FitSdk\Data\Session;
+use Beljic\FitSdk\Exception\CannotAnalyzeActivityException;
 
 final class ActivityAnalyzer
 {
     public function analyze(Activity $activity): ActivityStats
     {
         $sessions = $activity->sessions;
+
+        if ($sessions === []) {
+            throw new CannotAnalyzeActivityException('Cannot analyze an Activity with no sessions.');
+        }
 
         $totalDistance = 0.0;
         $totalDuration = 0;
@@ -158,6 +163,10 @@ final class ActivityAnalyzer
      */
     public function sampleRoute(Activity $activity, int $maxPoints = 500): array
     {
+        if ($maxPoints < 2) {
+            throw new \InvalidArgumentException('maxPoints must be at least 2.');
+        }
+
         $gpsRecords = [];
 
         foreach ($activity->sessions as $session) {
