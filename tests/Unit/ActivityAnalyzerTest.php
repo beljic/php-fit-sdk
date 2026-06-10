@@ -296,6 +296,23 @@ final class ActivityAnalyzerTest extends TestCase
         self::assertSame(1000.0, $stats->laps[0]->totalDistance);
     }
 
+    public function testAnalyzeWeightsAveragesByMovingTime(): void
+    {
+        // 1 hour at 150 bpm + 6 minutes at 100 bpm:
+        // weighted avg = (150*3600 + 100*360) / 3960 ≈ 145, not (150+100)/2 = 125
+        $s1 = $this->makeSession(elapsed: 3600, moving: 3600, avgHr: 150);
+        $s2 = $this->makeSession(elapsed: 360, moving: 360, avgHr: 100);
+        $activity = new Activity(
+            createdAt: new \DateTimeImmutable('2024-06-15T08:00:00+00:00'),
+            device: null,
+            sessions: [$s1, $s2],
+        );
+
+        $stats = (new ActivityAnalyzer())->analyze($activity);
+
+        self::assertSame(145, $stats->avgHeartRate);
+    }
+
     public function testAnalyzeThrowsWhenActivityHasNoSessions(): void
     {
         $this->expectException(CannotAnalyzeActivityException::class);
