@@ -34,6 +34,14 @@ final class BaseTypeTest extends TestCase
         self::assertSame(0x7FFFFFFF, BaseType::Sint32->invalidValue());
     }
 
+    public function testZTypesUseZeroAsInvalidValue(): void
+    {
+        self::assertSame(0x00, BaseType::Uint8z->invalidValue());
+        self::assertSame(0x00, BaseType::Uint16z->invalidValue());
+        self::assertSame(0x00, BaseType::Uint32z->invalidValue());
+        self::assertSame(0x00, BaseType::Uint64z->invalidValue());
+    }
+
     public function testTryFromValidValue(): void
     {
         self::assertSame(BaseType::Uint8, BaseType::tryFrom(0x02));

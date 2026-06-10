@@ -38,15 +38,17 @@ enum BaseType: int
     public function invalidValue(): int|float
     {
         return match ($this) {
-            self::Uint8, self::Enum, self::Byte, self::Uint8z => 0xFF,
+            self::Uint8, self::Enum, self::Byte => 0xFF,
             self::Sint8  => 0x7F,
-            self::Uint16, self::Uint16z => 0xFFFF,
+            self::Uint16 => 0xFFFF,
             self::Sint16 => 0x7FFF,
-            self::Uint32, self::Uint32z => 0xFFFFFFFF,
+            self::Uint32 => 0xFFFFFFFF,
             self::Sint32 => 0x7FFFFFFF,
             self::Float32 => 0xFFFFFFFF,
-            self::Float64, self::Uint64, self::Uint64z => PHP_INT_MAX,
+            self::Float64, self::Uint64 => PHP_INT_MAX,
             self::Sint64 => PHP_INT_MAX,
+            // "z" types use 0 as the invalid value (FIT spec table 4-6)
+            self::Uint8z, self::Uint16z, self::Uint32z, self::Uint64z => 0x00,
             self::String => 0x00,
         };
     }
