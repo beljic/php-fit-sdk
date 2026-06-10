@@ -4,6 +4,6 @@ declare(strict_types=1);
 
 namespace Beljic\FitSdk\Exception;
 
-final class CannotAnalyzeActivityException extends \RuntimeException
+final class CannotAnalyzeActivityException extends \RuntimeException implements FitSdkException
 {
 }

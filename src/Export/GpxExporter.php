@@ -7,6 +7,7 @@ namespace Beljic\FitSdk\Export;
 use Beljic\FitSdk\Data\Activity;
 use Beljic\FitSdk\Data\Record;
 use Beljic\FitSdk\Data\Session;
+use Beljic\FitSdk\Exception\GpxExportException;
 
 final class GpxExporter
 {
@@ -48,11 +49,11 @@ final class GpxExporter
         $dir = dirname($path);
 
         if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
-            throw new \RuntimeException("Cannot create directory: {$dir}");
+            throw new GpxExportException("Cannot create directory: {$dir}");
         }
 
-        if (file_put_contents($path, $this->export($activity, $options)) === false) {
-            throw new \RuntimeException("Failed to write GPX file: {$path}");
+        if (@file_put_contents($path, $this->export($activity, $options)) === false) {
+            throw new GpxExportException("Failed to write GPX file: {$path}");
         }
     }
 
