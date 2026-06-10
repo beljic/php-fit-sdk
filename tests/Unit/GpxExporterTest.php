@@ -200,8 +200,14 @@ final class GpxExporterTest extends TestCase
     {
         $this->expectException(\RuntimeException::class);
 
-        // /nonexistent root means mkdir will fail
-        $this->exporter->exportToFile($this->makeActivity(), '/nonexistent/deep/path/out.gpx');
+        // A regular file used as a directory component — mkdir() fails even when running as root
+        $file = (string) tempnam(sys_get_temp_dir(), 'fit');
+
+        try {
+            $this->exporter->exportToFile($this->makeActivity(), $file . '/sub/out.gpx');
+        } finally {
+            @unlink($file);
+        }
     }
 
     // --- Helpers ---
