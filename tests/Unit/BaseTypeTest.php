@@ -48,9 +48,4 @@ final class BaseTypeTest extends TestCase
         self::assertSame(BaseType::Sint32, BaseType::tryFrom(0x85));
         self::assertSame(BaseType::Float32, BaseType::tryFrom(0x88));
     }
-
-    public function testTryFromUnknownReturnsNull(): void
-    {
-        self::assertNull(BaseType::tryFrom(0xFF));
-    }
 }

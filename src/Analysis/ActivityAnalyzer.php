@@ -171,40 +171,30 @@ final class ActivityAnalyzer
             throw new \InvalidArgumentException('maxPoints must be at least 2.');
         }
 
-        $gpsRecords = [];
+        $points = [];
 
         foreach ($activity->sessions as $session) {
             foreach ($session->records as $record) {
                 if ($record->lat !== null && $record->lon !== null) {
-                    $gpsRecords[] = $record;
+                    $points[] = new RoutePoint($record->lat, $record->lon, $record->altitude);
                 }
             }
         }
 
-        $total = count($gpsRecords);
-
-        if ($total === 0) {
-            return [];
-        }
+        $total = count($points);
 
         if ($total <= $maxPoints) {
-            $result = [];
-            foreach ($gpsRecords as $record) {
-                $result[] = new RoutePoint($record->lat, $record->lon, $record->altitude);
-            }
-            return $result;
+            return $points;
         }
 
         $step   = (int) ceil($total / ($maxPoints - 1));
         $result = [];
 
         for ($i = 0; $i < $total - 1; $i += $step) {
-            $r        = $gpsRecords[$i];
-            $result[] = new RoutePoint($r->lat, $r->lon, $r->altitude);
+            $result[] = $points[$i];
         }
 
-        $last = $gpsRecords[$total - 1];
-        $result[] = new RoutePoint($last->lat, $last->lon, $last->altitude);
+        $result[] = $points[$total - 1];
 
         return $result;
     }

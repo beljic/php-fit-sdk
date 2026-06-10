@@ -35,7 +35,7 @@ enum BaseType: int
         };
     }
 
-    public function invalidValue(): int|float
+    public function invalidValue(): int
     {
         return match ($this) {
             self::Uint8, self::Enum, self::Byte => 0xFF,

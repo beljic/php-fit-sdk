@@ -321,6 +321,10 @@ final class ActivityAnalyzerTest extends TestCase
 
     // --- helpers ---
 
+    /**
+     * @param Record[] $records
+     * @param Lap[]    $laps
+     */
     private function makeSession(
         float $distance = 5000.0,
         int $elapsed = 1800,
@@ -448,9 +452,9 @@ final class ActivityAnalyzerTest extends TestCase
 
     public function testSampleRouteAcceptsMaxPointsOfTwo(): void
     {
-        // Should not throw
         $result = (new ActivityAnalyzer())->sampleRoute($this->makeActivity(), maxPoints: 2);
-        self::assertIsArray($result);
+
+        self::assertCount(1, $result); // single GPS record in the fixture activity
     }
 
     // --- private helpers ---

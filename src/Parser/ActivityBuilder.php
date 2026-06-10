@@ -192,7 +192,7 @@ final class ActivityBuilder
         };
     }
 
-    /** @return array<int, mixed> field number → value */
+    /** @return array<int|string, mixed> field number (or dev-field key) → value */
     private function readFieldValues(DefinitionMessage $definition): array
     {
         $values = [];
@@ -255,7 +255,7 @@ final class ActivityBuilder
         return $value === $field->baseType->invalidValue() ? null : $value;
     }
 
-    /** @param array<int, mixed> $v */
+    /** @param array<int|string, mixed> $v */
     private function handleFileId(array $v): void
     {
         if (isset($v[4])) {
@@ -263,7 +263,7 @@ final class ActivityBuilder
         }
     }
 
-    /** @param array<int, mixed> $v */
+    /** @param array<int|string, mixed> $v */
     private function handleDeviceInfo(array $v): void
     {
         // device_index 0 is the file creator (the watch/bike computer that
@@ -328,7 +328,7 @@ final class ActivityBuilder
         );
     }
 
-    /** @param array<int, mixed> $v */
+    /** @param array<int|string, mixed> $v */
     private function handleFieldDescription(array $v): void
     {
         $devIdx   = isset($v[0]) ? (int) $v[0] : null;
@@ -348,7 +348,7 @@ final class ActivityBuilder
         ];
     }
 
-    /** @param array<int, mixed> $v */
+    /** @param array<int|string, mixed> $v */
     private function handleLap(array $v): void
     {
         if (!isset($v[253], $v[2])) {
@@ -374,7 +374,7 @@ final class ActivityBuilder
         );
     }
 
-    /** @param array<int, mixed> $v */
+    /** @param array<int|string, mixed> $v */
     private function handleSession(array $v): void
     {
         $sport = isset($v[5]) ? Sport::fromFitValue((int) $v[5]) : Sport::Generic;

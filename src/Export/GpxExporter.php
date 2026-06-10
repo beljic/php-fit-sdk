@@ -66,10 +66,11 @@ final class GpxExporter
         $seg = $dom->createElement('trkseg');
 
         foreach ($session->records as $record) {
-            if ($record->lat === null || $record->lon === null) {
-                continue;
+            $point = $this->buildTrackPoint($dom, $record, $options);
+
+            if ($point !== null) {
+                $seg->appendChild($point);
             }
-            $seg->appendChild($this->buildTrackPoint($dom, $record, $options));
         }
 
         $trk->appendChild($seg);
@@ -77,8 +78,12 @@ final class GpxExporter
         return $trk;
     }
 
-    private function buildTrackPoint(\DOMDocument $dom, Record $record, ExportOptions $options): \DOMElement
+    private function buildTrackPoint(\DOMDocument $dom, Record $record, ExportOptions $options): ?\DOMElement
     {
+        if ($record->lat === null || $record->lon === null) {
+            return null;
+        }
+
         $pt = $dom->createElement('trkpt');
         $pt->setAttribute('lat', number_format($record->lat, 7, '.', ''));
         $pt->setAttribute('lon', number_format($record->lon, 7, '.', ''));
