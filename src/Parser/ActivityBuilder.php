@@ -32,6 +32,7 @@ final class ActivityBuilder
 
     private ?\DateTimeImmutable $createdAt = null;
     private ?DeviceInfo $device = null;
+    private bool $deviceIsCreator = false;
     private int $lastTimestamp = 0;
 
     /** @var Session[] */
@@ -263,9 +264,16 @@ final class ActivityBuilder
     /** @param array<int, mixed> $v */
     private function handleDeviceInfo(array $v): void
     {
-        if ($this->device !== null) {
-            return; // keep first device (primary)
+        // device_index 0 is the file creator (the watch/bike computer that
+        // recorded the activity); other indexes are paired sensors such as
+        // an HR strap. Prefer the creator, fall back to the first message.
+        $isCreator = isset($v[0]) && (int) $v[0] === 0;
+
+        if ($this->device !== null && ($this->deviceIsCreator || !$isCreator)) {
+            return;
         }
+
+        $this->deviceIsCreator = $isCreator;
 
         $manufacturer = isset($v[1])
             ? Manufacturer::fromFitValue((int) $v[1])
@@ -279,7 +287,8 @@ final class ActivityBuilder
             manufacturer: $manufacturer,
             productName: $productName,
             serialNumber: isset($v[3]) ? (int) $v[3] : null,
-            softwareVersion: isset($v[5]) ? (string) $v[5] : null,
+            // software_version is stored with scale 100 (e.g. 950 → "9.50")
+            softwareVersion: isset($v[5]) ? sprintf('%.2f', (int) $v[5] / 100) : null,
         );
     }
 

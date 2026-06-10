@@ -274,6 +274,27 @@ final class FitParserTest extends TestCase
         self::assertCount(0, $activity->sessions[0]->records);
     }
 
+    public function testDeviceInfoPrefersCreatorOverSensors(): void
+    {
+        $deviceInfoDef = [
+            ['num' => 0, 'size' => 1, 'baseType' => self::UINT8],  // device_index
+            ['num' => 1, 'size' => 2, 'baseType' => self::UINT16], // manufacturer
+            ['num' => 5, 'size' => 2, 'baseType' => self::UINT16], // software_version (scale 100)
+        ];
+
+        $binary = (new FitFileBuilder())
+            ->definition(0, 23, $deviceInfoDef) // global=23 (device_info)
+            ->data(0, [0 => 1, 1 => 32])        // sensor first (device_index=1)
+            ->data(0, [0 => 0, 1 => 1, 5 => 950]) // creator: Garmin, sw 9.50
+            ->build();
+
+        $activity = $this->parser->parse(new StringSource($binary));
+
+        self::assertNotNull($activity->device);
+        self::assertSame(Manufacturer::Garmin, $activity->device->manufacturer);
+        self::assertSame('9.50', $activity->device->softwareVersion);
+    }
+
     public function testSkipsUnknownMessageTypes(): void
     {
         // Global message 999 — unknown, should be skipped without exception
