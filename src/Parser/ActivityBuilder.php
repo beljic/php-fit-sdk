@@ -55,6 +55,8 @@ final class ActivityBuilder
             $this->processRecord();
         }
 
+        $this->flushPendingIntoFallbackSession();
+
         return new Activity(
             createdAt: $this->createdAt ?? new \DateTimeImmutable(),
             device: $this->device,
@@ -392,6 +394,58 @@ final class ActivityBuilder
             avgPower: isset($v[20]) ? (float) $v[20] : null,
             maxPower: isset($v[21]) ? (float) $v[21] : null,
             avgCadence: isset($v[18]) ? (int) $v[18] : null,
+            records: $this->pendingRecords,
+            laps: $this->pendingLaps,
+        );
+
+        $this->pendingRecords = [];
+        $this->pendingLaps    = [];
+    }
+
+    /**
+     * Records/laps left after the last session message — or in files with no
+     * session message at all (interrupted recordings, some devices) — would
+     * otherwise be silently dropped. Wrap them in a synthetic session.
+     */
+    private function flushPendingIntoFallbackSession(): void
+    {
+        if ($this->pendingRecords === [] && $this->pendingLaps === []) {
+            return;
+        }
+
+        if ($this->pendingRecords !== []) {
+            $startTime = $this->pendingRecords[0]->timestamp;
+            $endTime   = $this->pendingRecords[count($this->pendingRecords) - 1]->timestamp;
+        } else {
+            $startTime = $this->pendingLaps[0]->startTime;
+            $endTime   = $this->pendingLaps[count($this->pendingLaps) - 1]->endTime;
+        }
+
+        $elapsed = max(0, $endTime->getTimestamp() - $startTime->getTimestamp());
+
+        $distance = 0.0;
+        for ($i = count($this->pendingRecords) - 1; $i >= 0; $i--) {
+            if ($this->pendingRecords[$i]->distance !== null) {
+                $distance = $this->pendingRecords[$i]->distance;
+                break;
+            }
+        }
+
+        $this->sessions[] = new Session(
+            sport: Sport::Generic,
+            startTime: $startTime,
+            totalElapsedTime: $elapsed,
+            totalTimerTime: $elapsed,
+            totalDistance: $distance,
+            totalAscent: null,
+            totalDescent: null,
+            avgHeartRate: null,
+            maxHeartRate: null,
+            avgSpeed: null,
+            maxSpeed: null,
+            avgPower: null,
+            maxPower: null,
+            avgCadence: null,
             records: $this->pendingRecords,
             laps: $this->pendingLaps,
         );

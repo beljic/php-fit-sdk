@@ -310,6 +310,30 @@ final class FitParserTest extends TestCase
         self::assertCount(0, $activity->sessions);
     }
 
+    public function testRecordsWithoutSessionMessageGetFallbackSession(): void
+    {
+        $t0 = new \DateTimeImmutable('2024-06-15 08:00:00', new \DateTimeZone('UTC'));
+        $t1 = $t0->modify('+10 minutes');
+
+        $binary = (new FitFileBuilder())
+            ->definition(0, 20, [  // record messages, but no session message
+                ['num' => 253, 'size' => 4, 'baseType' => self::UINT32],
+                ['num' => 5,   'size' => 4, 'baseType' => self::UINT32], // distance (cm)
+            ])
+            ->data(0, [253 => FitFileBuilder::fitTs($t0), 5 => FitFileBuilder::distToRaw(0.0)])
+            ->data(0, [253 => FitFileBuilder::fitTs($t1), 5 => FitFileBuilder::distToRaw(2500.0)])
+            ->build();
+
+        $activity = $this->parser->parse(new StringSource($binary));
+
+        self::assertCount(1, $activity->sessions);
+        $session = $activity->sessions[0];
+        self::assertSame(Sport::Generic, $session->sport);
+        self::assertCount(2, $session->records);
+        self::assertSame(600, $session->totalElapsedTime);
+        self::assertEqualsWithDelta(2500.0, $session->totalDistance, 1.0);
+    }
+
     public function testMultipleSessions(): void
     {
         $ts = new \DateTimeImmutable('2024-06-15 08:00:00', new \DateTimeZone('UTC'));
