@@ -3,7 +3,22 @@
 
 declare(strict_types=1);
 
-require dirname(__DIR__) . '/vendor/autoload.php';
+(static function (): void {
+    $candidates = [
+        dirname(__DIR__) . '/vendor/autoload.php', // repository checkout
+        dirname(__DIR__, 3) . '/autoload.php',     // installed as a Composer dependency
+    ];
+
+    foreach ($candidates as $autoload) {
+        if (is_file($autoload)) {
+            require $autoload;
+            return;
+        }
+    }
+
+    fwrite(STDERR, "Could not locate Composer autoloader. Run 'composer install' first.\n");
+    exit(1);
+})();
 
 use Beljic\FitSdk\Export\ExportOptions;
 use Beljic\FitSdk\Export\GpxExporter;

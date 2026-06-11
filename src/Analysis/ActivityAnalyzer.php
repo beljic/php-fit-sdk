@@ -26,14 +26,16 @@ final class ActivityAnalyzer
         $maxPower      = null;
         $totalAscent   = null;
         $totalDescent  = null;
-        $hrSum         = 0;
-        $hrCount       = 0;
+        // Session averages are weighted by moving time so short sessions
+        // don't skew multi-session (e.g. triathlon) aggregates.
+        $hrSum         = 0.0;
+        $hrWeight      = 0;
         $speedSum      = 0.0;
-        $speedCount    = 0;
+        $speedWeight   = 0;
         $powerSum      = 0.0;
-        $powerCount    = 0;
-        $cadenceSum    = 0;
-        $cadenceCount  = 0;
+        $powerWeight   = 0;
+        $cadenceSum    = 0.0;
+        $cadenceWeight = 0;
         $allLaps       = [];
 
         foreach ($sessions as $session) {
@@ -41,30 +43,32 @@ final class ActivityAnalyzer
             $totalDuration += $session->totalElapsedTime;
             $totalMoving   += $session->totalTimerTime;
 
+            $weight = max(1, $session->totalTimerTime);
+
             if ($session->maxHeartRate !== null) {
                 $maxHr = $maxHr === null ? $session->maxHeartRate : max($maxHr, $session->maxHeartRate);
             }
             if ($session->avgHeartRate !== null) {
-                $hrSum   += $session->avgHeartRate;
-                $hrCount++;
+                $hrSum    += $session->avgHeartRate * $weight;
+                $hrWeight += $weight;
             }
             if ($session->maxSpeed !== null) {
                 $maxSpeed = $maxSpeed === null ? $session->maxSpeed : max($maxSpeed, $session->maxSpeed);
             }
             if ($session->avgSpeed !== null) {
-                $speedSum += $session->avgSpeed;
-                $speedCount++;
+                $speedSum    += $session->avgSpeed * $weight;
+                $speedWeight += $weight;
             }
             if ($session->maxPower !== null) {
                 $maxPower = $maxPower === null ? $session->maxPower : max($maxPower, $session->maxPower);
             }
             if ($session->avgPower !== null) {
-                $powerSum += $session->avgPower;
-                $powerCount++;
+                $powerSum    += $session->avgPower * $weight;
+                $powerWeight += $weight;
             }
             if ($session->avgCadence !== null) {
-                $cadenceSum += $session->avgCadence;
-                $cadenceCount++;
+                $cadenceSum    += $session->avgCadence * $weight;
+                $cadenceWeight += $weight;
             }
             if ($session->totalAscent !== null) {
                 $totalAscent = ($totalAscent ?? 0.0) + $session->totalAscent;
@@ -95,13 +99,13 @@ final class ActivityAnalyzer
             duration: $totalDuration,
             movingTime: $totalMoving,
             pace: $totalDistance > 0.0 ? $totalMoving / ($totalDistance / 1000.0) : null,
-            avgHeartRate: $hrCount > 0 ? (int) round($hrSum / $hrCount) : null,
+            avgHeartRate: $hrWeight > 0 ? (int) round($hrSum / $hrWeight) : null,
             maxHeartRate: $maxHr,
-            avgSpeed: $speedCount > 0 ? $speedSum / $speedCount : null,
+            avgSpeed: $speedWeight > 0 ? $speedSum / $speedWeight : null,
             maxSpeed: $maxSpeed,
-            avgPower: $powerCount > 0 ? $powerSum / $powerCount : null,
+            avgPower: $powerWeight > 0 ? $powerSum / $powerWeight : null,
             maxPower: $maxPower,
-            avgCadence: $cadenceCount > 0 ? (int) round($cadenceSum / $cadenceCount) : null,
+            avgCadence: $cadenceWeight > 0 ? (int) round($cadenceSum / $cadenceWeight) : null,
             totalAscent: $totalAscent,
             totalDescent: $totalDescent,
             bounds: $this->computeBounds($sessions),
@@ -167,40 +171,30 @@ final class ActivityAnalyzer
             throw new \InvalidArgumentException('maxPoints must be at least 2.');
         }
 
-        $gpsRecords = [];
+        $points = [];
 
         foreach ($activity->sessions as $session) {
             foreach ($session->records as $record) {
                 if ($record->lat !== null && $record->lon !== null) {
-                    $gpsRecords[] = $record;
+                    $points[] = new RoutePoint($record->lat, $record->lon, $record->altitude);
                 }
             }
         }
 
-        $total = count($gpsRecords);
-
-        if ($total === 0) {
-            return [];
-        }
+        $total = count($points);
 
         if ($total <= $maxPoints) {
-            $result = [];
-            foreach ($gpsRecords as $record) {
-                $result[] = new RoutePoint($record->lat, $record->lon, $record->altitude);
-            }
-            return $result;
+            return $points;
         }
 
         $step   = (int) ceil($total / ($maxPoints - 1));
         $result = [];
 
         for ($i = 0; $i < $total - 1; $i += $step) {
-            $r        = $gpsRecords[$i];
-            $result[] = new RoutePoint($r->lat, $r->lon, $r->altitude);
+            $result[] = $points[$i];
         }
 
-        $last = $gpsRecords[$total - 1];
-        $result[] = new RoutePoint($last->lat, $last->lon, $last->altitude);
+        $result[] = $points[$total - 1];
 
         return $result;
     }

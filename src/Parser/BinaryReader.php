@@ -14,22 +14,22 @@ final class BinaryReader
 
     public function readUint8(): int
     {
-        return unpack('C', $this->read(1))[1];
+        return $this->unpackInt('C', $this->read(1));
     }
 
     public function readUint16(bool $bigEndian = false): int
     {
-        return unpack($bigEndian ? 'n' : 'v', $this->read(2))[1];
+        return $this->unpackInt($bigEndian ? 'n' : 'v', $this->read(2));
     }
 
     public function readUint32(bool $bigEndian = false): int
     {
-        return unpack($bigEndian ? 'N' : 'V', $this->read(4))[1];
+        return $this->unpackInt($bigEndian ? 'N' : 'V', $this->read(4));
     }
 
     public function readInt8(): int
     {
-        return unpack('c', $this->read(1))[1];
+        return $this->unpackInt('c', $this->read(1));
     }
 
     public function readInt16(bool $bigEndian = false): int
@@ -46,7 +46,13 @@ final class BinaryReader
 
     public function readFloat32(bool $bigEndian = false): float
     {
-        return unpack($bigEndian ? 'G' : 'g', $this->read(4))[1];
+        $values = unpack($bigEndian ? 'G' : 'g', $this->read(4));
+
+        if ($values === false || !is_float($values[1])) {
+            throw new InvalidFitFileException("Failed to decode float at position {$this->position}");
+        }
+
+        return $values[1];
     }
 
     public function readBytes(int $length): string
@@ -77,6 +83,17 @@ final class BinaryReader
     public function eof(): bool
     {
         return $this->position >= strlen($this->data);
+    }
+
+    private function unpackInt(string $format, string $bytes): int
+    {
+        $values = unpack($format, $bytes);
+
+        if ($values === false || !is_int($values[1])) {
+            throw new InvalidFitFileException("Failed to decode integer at position {$this->position}");
+        }
+
+        return $values[1];
     }
 
     private function read(int $length): string

@@ -32,6 +32,7 @@ final class ActivityBuilder
 
     private ?\DateTimeImmutable $createdAt = null;
     private ?DeviceInfo $device = null;
+    private bool $deviceIsCreator = false;
     private int $lastTimestamp = 0;
 
     /** @var Session[] */
@@ -53,6 +54,8 @@ final class ActivityBuilder
         while ($this->reader->position() < $this->dataEndPosition) {
             $this->processRecord();
         }
+
+        $this->flushPendingIntoFallbackSession();
 
         return new Activity(
             createdAt: $this->createdAt ?? new \DateTimeImmutable(),
@@ -189,7 +192,7 @@ final class ActivityBuilder
         };
     }
 
-    /** @return array<int, mixed> field number → value */
+    /** @return array<int|string, mixed> field number (or dev-field key) → value */
     private function readFieldValues(DefinitionMessage $definition): array
     {
         $values = [];
@@ -205,11 +208,16 @@ final class ActivityBuilder
         return $values;
     }
 
+    /**
+     * Reads a single field value and normalizes the FIT "invalid" sentinel
+     * (e.g. 0xFFFF for uint16, 0x7FFFFFFF for sint32) to null.
+     */
     private function readValue(FieldDefinition $field, bool $bigEndian): mixed
     {
         // String and Byte are always variable-length — use declared size
         if ($field->baseType === BaseType::String) {
-            return $this->reader->readString($field->size);
+            $value = $this->reader->readString($field->size);
+            return $value === '' ? null : $value;
         }
         if ($field->baseType === BaseType::Byte) {
             return $this->reader->readBytes($field->size);
@@ -220,7 +228,7 @@ final class ActivityBuilder
             return $this->reader->readBytes($field->size);
         }
 
-        return match ($field->baseType) {
+        $value = match ($field->baseType) {
             BaseType::Uint8, BaseType::Enum, BaseType::Uint8z
                 => $this->reader->readUint8(),
             BaseType::Sint8
@@ -238,9 +246,16 @@ final class ActivityBuilder
             default
                 => $this->reader->readBytes($field->size),
         };
+
+        // Float32 invalid (0xFFFFFFFF bit pattern) decodes to NaN
+        if (is_float($value) && is_nan($value)) {
+            return null;
+        }
+
+        return $value === $field->baseType->invalidValue() ? null : $value;
     }
 
-    /** @param array<int, mixed> $v */
+    /** @param array<int|string, mixed> $v */
     private function handleFileId(array $v): void
     {
         if (isset($v[4])) {
@@ -248,12 +263,19 @@ final class ActivityBuilder
         }
     }
 
-    /** @param array<int, mixed> $v */
+    /** @param array<int|string, mixed> $v */
     private function handleDeviceInfo(array $v): void
     {
-        if ($this->device !== null) {
-            return; // keep first device (primary)
+        // device_index 0 is the file creator (the watch/bike computer that
+        // recorded the activity); other indexes are paired sensors such as
+        // an HR strap. Prefer the creator, fall back to the first message.
+        $isCreator = isset($v[0]) && (int) $v[0] === 0;
+
+        if ($this->device !== null && ($this->deviceIsCreator || !$isCreator)) {
+            return;
         }
+
+        $this->deviceIsCreator = $isCreator;
 
         $manufacturer = isset($v[1])
             ? Manufacturer::fromFitValue((int) $v[1])
@@ -267,7 +289,8 @@ final class ActivityBuilder
             manufacturer: $manufacturer,
             productName: $productName,
             serialNumber: isset($v[3]) ? (int) $v[3] : null,
-            softwareVersion: isset($v[5]) ? (string) $v[5] : null,
+            // software_version is stored with scale 100 (e.g. 950 → "9.50")
+            softwareVersion: isset($v[5]) ? sprintf('%.2f', (int) $v[5] / 100) : null,
         );
     }
 
@@ -294,18 +317,18 @@ final class ActivityBuilder
             timestamp: $this->toDateTime((int) $v[253]),
             lat: isset($v[0]) ? $this->semicirclesToDeg((int) $v[0]) : null,
             lon: isset($v[1]) ? $this->semicirclesToDeg((int) $v[1]) : null,
-            altitude: isset($v[2]) && $v[2] !== 0xFFFF ? ((int) $v[2] / 5 - 500) : null,
-            heartRate: isset($v[3]) && $v[3] !== 0xFF ? (int) $v[3] : null,
-            cadence: isset($v[4]) && $v[4] !== 0xFF ? (int) $v[4] : null,
+            altitude: isset($v[2]) ? ((int) $v[2] / 5 - 500) : null,
+            heartRate: isset($v[3]) ? (int) $v[3] : null,
+            cadence: isset($v[4]) ? (int) $v[4] : null,
             speed: isset($v[6]) ? ((int) $v[6] / 1000) : null,
-            power: isset($v[7]) && $v[7] !== 0xFFFF ? (float) $v[7] : null,
+            power: isset($v[7]) ? (float) $v[7] : null,
             distance: isset($v[5]) ? ((int) $v[5] / 100) : null,
             temperature: isset($v[13]) ? (float) $v[13] : null,
             developerFields: $devFields,
         );
     }
 
-    /** @param array<int, mixed> $v */
+    /** @param array<int|string, mixed> $v */
     private function handleFieldDescription(array $v): void
     {
         $devIdx   = isset($v[0]) ? (int) $v[0] : null;
@@ -325,7 +348,7 @@ final class ActivityBuilder
         ];
     }
 
-    /** @param array<int, mixed> $v */
+    /** @param array<int|string, mixed> $v */
     private function handleLap(array $v): void
     {
         if (!isset($v[253], $v[2])) {
@@ -338,20 +361,20 @@ final class ActivityBuilder
             totalDistance: isset($v[9]) ? ((int) $v[9] / 100) : 0.0,
             totalElapsedTime: isset($v[7]) ? (int) ((int) $v[7] / 1000) : 0,
             totalTimerTime: isset($v[8]) ? (int) ((int) $v[8] / 1000) : 0,
-            avgHeartRate: isset($v[15]) && $v[15] !== 0xFF ? (int) $v[15] : null,
-            maxHeartRate: isset($v[16]) && $v[16] !== 0xFF ? (int) $v[16] : null,
+            avgHeartRate: isset($v[15]) ? (int) $v[15] : null,
+            maxHeartRate: isset($v[16]) ? (int) $v[16] : null,
             avgSpeed: isset($v[13]) ? ((int) $v[13] / 1000) : null,
             maxSpeed: isset($v[14]) ? ((int) $v[14] / 1000) : null,
-            avgPower: isset($v[19]) && $v[19] !== 0xFFFF ? (float) $v[19] : null,
-            maxPower: isset($v[20]) && $v[20] !== 0xFFFF ? (float) $v[20] : null,
-            avgCadence: isset($v[17]) && $v[17] !== 0xFF ? (int) $v[17] : null,
-            totalAscent: isset($v[21]) && $v[21] !== 0xFFFF ? (float) $v[21] : null,
-            totalDescent: isset($v[22]) && $v[22] !== 0xFFFF ? (float) $v[22] : null,
+            avgPower: isset($v[19]) ? (float) $v[19] : null,
+            maxPower: isset($v[20]) ? (float) $v[20] : null,
+            avgCadence: isset($v[17]) ? (int) $v[17] : null,
+            totalAscent: isset($v[21]) ? (float) $v[21] : null,
+            totalDescent: isset($v[22]) ? (float) $v[22] : null,
             lapNumber: count($this->pendingLaps),
         );
     }
 
-    /** @param array<int, mixed> $v */
+    /** @param array<int|string, mixed> $v */
     private function handleSession(array $v): void
     {
         $sport = isset($v[5]) ? Sport::fromFitValue((int) $v[5]) : Sport::Generic;
@@ -362,15 +385,67 @@ final class ActivityBuilder
             totalElapsedTime: isset($v[7]) ? (int) ((int) $v[7] / 1000) : 0,
             totalTimerTime: isset($v[8]) ? (int) ((int) $v[8] / 1000) : 0,
             totalDistance: isset($v[9]) ? ((int) $v[9] / 100) : 0.0,
-            totalAscent: isset($v[22]) && $v[22] !== 0xFFFF ? (float) $v[22] : null,
-            totalDescent: isset($v[23]) && $v[23] !== 0xFFFF ? (float) $v[23] : null,
-            avgHeartRate: isset($v[16]) && $v[16] !== 0xFF ? (int) $v[16] : null,
-            maxHeartRate: isset($v[17]) && $v[17] !== 0xFF ? (int) $v[17] : null,
+            totalAscent: isset($v[22]) ? (float) $v[22] : null,
+            totalDescent: isset($v[23]) ? (float) $v[23] : null,
+            avgHeartRate: isset($v[16]) ? (int) $v[16] : null,
+            maxHeartRate: isset($v[17]) ? (int) $v[17] : null,
             avgSpeed: isset($v[14]) ? ((int) $v[14] / 1000) : null,
             maxSpeed: isset($v[15]) ? ((int) $v[15] / 1000) : null,
-            avgPower: isset($v[20]) && $v[20] !== 0xFFFF ? (float) $v[20] : null,
-            maxPower: isset($v[21]) && $v[21] !== 0xFFFF ? (float) $v[21] : null,
-            avgCadence: isset($v[18]) && $v[18] !== 0xFF ? (int) $v[18] : null,
+            avgPower: isset($v[20]) ? (float) $v[20] : null,
+            maxPower: isset($v[21]) ? (float) $v[21] : null,
+            avgCadence: isset($v[18]) ? (int) $v[18] : null,
+            records: $this->pendingRecords,
+            laps: $this->pendingLaps,
+        );
+
+        $this->pendingRecords = [];
+        $this->pendingLaps    = [];
+    }
+
+    /**
+     * Records/laps left after the last session message — or in files with no
+     * session message at all (interrupted recordings, some devices) — would
+     * otherwise be silently dropped. Wrap them in a synthetic session.
+     */
+    private function flushPendingIntoFallbackSession(): void
+    {
+        if ($this->pendingRecords === [] && $this->pendingLaps === []) {
+            return;
+        }
+
+        if ($this->pendingRecords !== []) {
+            $startTime = $this->pendingRecords[0]->timestamp;
+            $endTime   = $this->pendingRecords[count($this->pendingRecords) - 1]->timestamp;
+        } else {
+            $startTime = $this->pendingLaps[0]->startTime;
+            $endTime   = $this->pendingLaps[count($this->pendingLaps) - 1]->endTime;
+        }
+
+        $elapsed = max(0, $endTime->getTimestamp() - $startTime->getTimestamp());
+
+        $distance = 0.0;
+        for ($i = count($this->pendingRecords) - 1; $i >= 0; $i--) {
+            if ($this->pendingRecords[$i]->distance !== null) {
+                $distance = $this->pendingRecords[$i]->distance;
+                break;
+            }
+        }
+
+        $this->sessions[] = new Session(
+            sport: Sport::Generic,
+            startTime: $startTime,
+            totalElapsedTime: $elapsed,
+            totalTimerTime: $elapsed,
+            totalDistance: $distance,
+            totalAscent: null,
+            totalDescent: null,
+            avgHeartRate: null,
+            maxHeartRate: null,
+            avgSpeed: null,
+            maxSpeed: null,
+            avgPower: null,
+            maxPower: null,
+            avgCadence: null,
             records: $this->pendingRecords,
             laps: $this->pendingLaps,
         );

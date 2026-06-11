@@ -32,9 +32,11 @@ final class GpxExporterTest extends TestCase
         $xpath = new \DOMXPath($doc);
         $xpath->registerNamespace('g', 'http://www.topografix.com/GPX/1/1');
 
-        self::assertSame('1.1', $doc->documentElement->getAttribute('version'));
-        self::assertGreaterThan(0, $xpath->query('//g:gpx/g:trk')->length);
-        self::assertGreaterThan(0, $xpath->query('//g:trkpt')->length);
+        $root = $doc->documentElement;
+        self::assertNotNull($root);
+        self::assertSame('1.1', $root->getAttribute('version'));
+        self::assertGreaterThan(0, $this->query($xpath, '//g:gpx/g:trk')->length);
+        self::assertGreaterThan(0, $this->query($xpath, '//g:trkpt')->length);
     }
 
     public function testMetadataTimeMatchesActivityCreatedAt(): void
@@ -63,9 +65,7 @@ final class GpxExporterTest extends TestCase
         $xpath    = new \DOMXPath($doc);
         $xpath->registerNamespace('g', 'http://www.topografix.com/GPX/1/1');
 
-        /** @var \DOMElement $pt */
-        $pt = $xpath->query('//g:trkpt')->item(0);
-        self::assertNotNull($pt);
+        $pt = $this->firstElement($xpath, '//g:trkpt');
         self::assertEqualsWithDelta(44.81250, (float) $pt->getAttribute('lat'), 0.00001);
         self::assertEqualsWithDelta(20.46120, (float) $pt->getAttribute('lon'), 0.00001);
     }
@@ -116,7 +116,7 @@ final class GpxExporterTest extends TestCase
         $xpath = new \DOMXPath($doc);
         $xpath->registerNamespace('g', 'http://www.topografix.com/GPX/1/1');
 
-        self::assertSame(1, $xpath->query('//g:trkpt')->length, 'Record with null lat/lon must be excluded');
+        self::assertSame(1, $this->query($xpath, '//g:trkpt')->length, 'Record with null lat/lon must be excluded');
     }
 
     public function testEmptyActivityProducesGpxWithNoTracks(): void
@@ -131,7 +131,7 @@ final class GpxExporterTest extends TestCase
         $xpath = new \DOMXPath($doc);
         $xpath->registerNamespace('g', 'http://www.topografix.com/GPX/1/1');
 
-        self::assertSame(0, $xpath->query('//g:trk')->length);
+        self::assertSame(0, $this->query($xpath, '//g:trk')->length);
     }
 
     public function testRouteOnlyExcludesExtensions(): void
@@ -153,12 +153,11 @@ final class GpxExporterTest extends TestCase
         $xpath    = new \DOMXPath($doc);
         $xpath->registerNamespace('g', 'http://www.topografix.com/GPX/1/1');
 
-        $pt = $xpath->query('//g:trkpt')->item(0);
-        self::assertNotNull($pt);
+        $pt = $this->firstElement($xpath, '//g:trkpt');
         self::assertNotEmpty($pt->getAttribute('lat'));
         self::assertNotEmpty($pt->getAttribute('lon'));
-        self::assertGreaterThan(0, $xpath->query('//g:ele')->length);
-        self::assertGreaterThan(0, $xpath->query('//g:time')->length);
+        self::assertGreaterThan(0, $this->query($xpath, '//g:ele')->length);
+        self::assertGreaterThan(0, $this->query($xpath, '//g:time')->length);
     }
 
     public function testDefaultOptionsPreservesExtensions(): void
@@ -200,8 +199,14 @@ final class GpxExporterTest extends TestCase
     {
         $this->expectException(\RuntimeException::class);
 
-        // /nonexistent root means mkdir will fail
-        $this->exporter->exportToFile($this->makeActivity(), '/nonexistent/deep/path/out.gpx');
+        // A regular file used as a directory component — mkdir() fails even when running as root
+        $file = (string) tempnam(sys_get_temp_dir(), 'fit');
+
+        try {
+            $this->exporter->exportToFile($this->makeActivity(), $file . '/sub/out.gpx');
+        } finally {
+            @unlink($file);
+        }
     }
 
     // --- Helpers ---
@@ -265,5 +270,22 @@ final class GpxExporterTest extends TestCase
         $doc = new \DOMDocument();
         $doc->loadXML($xml);
         return $doc;
+    }
+
+    /** @return \DOMNodeList<\DOMNameSpaceNode|\DOMNode> */
+    private function query(\DOMXPath $xpath, string $expression): \DOMNodeList
+    {
+        $nodes = $xpath->query($expression);
+        self::assertNotFalse($nodes, "XPath query failed: {$expression}");
+
+        return $nodes;
+    }
+
+    private function firstElement(\DOMXPath $xpath, string $expression): \DOMElement
+    {
+        $node = $this->query($xpath, $expression)->item(0);
+        self::assertInstanceOf(\DOMElement::class, $node, "No element matched: {$expression}");
+
+        return $node;
     }
 }

@@ -7,6 +7,7 @@ namespace Beljic\FitSdk\Export;
 use Beljic\FitSdk\Data\Activity;
 use Beljic\FitSdk\Data\Record;
 use Beljic\FitSdk\Data\Session;
+use Beljic\FitSdk\Exception\GpxExportException;
 
 final class GpxExporter
 {
@@ -48,11 +49,11 @@ final class GpxExporter
         $dir = dirname($path);
 
         if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
-            throw new \RuntimeException("Cannot create directory: {$dir}");
+            throw new GpxExportException("Cannot create directory: {$dir}");
         }
 
-        if (file_put_contents($path, $this->export($activity, $options)) === false) {
-            throw new \RuntimeException("Failed to write GPX file: {$path}");
+        if (@file_put_contents($path, $this->export($activity, $options)) === false) {
+            throw new GpxExportException("Failed to write GPX file: {$path}");
         }
     }
 
@@ -65,10 +66,11 @@ final class GpxExporter
         $seg = $dom->createElement('trkseg');
 
         foreach ($session->records as $record) {
-            if ($record->lat === null || $record->lon === null) {
-                continue;
+            $point = $this->buildTrackPoint($dom, $record, $options);
+
+            if ($point !== null) {
+                $seg->appendChild($point);
             }
-            $seg->appendChild($this->buildTrackPoint($dom, $record, $options));
         }
 
         $trk->appendChild($seg);
@@ -76,8 +78,12 @@ final class GpxExporter
         return $trk;
     }
 
-    private function buildTrackPoint(\DOMDocument $dom, Record $record, ExportOptions $options): \DOMElement
+    private function buildTrackPoint(\DOMDocument $dom, Record $record, ExportOptions $options): ?\DOMElement
     {
+        if ($record->lat === null || $record->lon === null) {
+            return null;
+        }
+
         $pt = $dom->createElement('trkpt');
         $pt->setAttribute('lat', number_format($record->lat, 7, '.', ''));
         $pt->setAttribute('lon', number_format($record->lon, 7, '.', ''));

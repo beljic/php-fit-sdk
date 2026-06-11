@@ -204,6 +204,97 @@ final class FitParserTest extends TestCase
         self::assertSame(0, $lap->lapNumber);
     }
 
+    public function testInvalidSentinelValuesBecomeNull(): void
+    {
+        $ts = new \DateTimeImmutable('2024-06-15 08:00:00', new \DateTimeZone('UTC'));
+
+        $binary = (new FitFileBuilder())
+            ->definition(0, 20, [  // global=20 (record)
+                ['num' => 253, 'size' => 4, 'baseType' => self::UINT32],
+                ['num' => 0,   'size' => 4, 'baseType' => self::SINT32], // lat
+                ['num' => 1,   'size' => 4, 'baseType' => self::SINT32], // lon
+                ['num' => 2,   'size' => 2, 'baseType' => self::UINT16], // altitude
+                ['num' => 3,   'size' => 1, 'baseType' => self::UINT8],  // heart_rate
+                ['num' => 5,   'size' => 4, 'baseType' => self::UINT32], // distance
+                ['num' => 6,   'size' => 2, 'baseType' => self::UINT16], // speed
+                ['num' => 7,   'size' => 2, 'baseType' => self::UINT16], // power
+            ])
+            ->data(0, [
+                253 => FitFileBuilder::fitTs($ts),
+                0   => 0x7FFFFFFF, // sint32 invalid
+                1   => 0x7FFFFFFF,
+                2   => 0xFFFF,     // uint16 invalid
+                3   => 0xFF,       // uint8 invalid
+                5   => 0xFFFFFFFF, // uint32 invalid
+                6   => 0xFFFF,
+                7   => 0xFFFF,
+            ])
+            ->definition(1, 18, [
+                ['num' => 253, 'size' => 4, 'baseType' => self::UINT32],
+                ['num' => 2,   'size' => 4, 'baseType' => self::UINT32],
+                ['num' => 5,   'size' => 1, 'baseType' => self::UINT8],
+            ])
+            ->data(1, [253 => FitFileBuilder::fitTs($ts), 2 => FitFileBuilder::fitTs($ts), 5 => 1])
+            ->build();
+
+        $activity = $this->parser->parse(new StringSource($binary));
+
+        self::assertCount(1, $activity->sessions[0]->records);
+        $record = $activity->sessions[0]->records[0];
+
+        self::assertNull($record->lat);
+        self::assertNull($record->lon);
+        self::assertNull($record->altitude);
+        self::assertNull($record->heartRate);
+        self::assertNull($record->distance);
+        self::assertNull($record->speed);
+        self::assertNull($record->power);
+    }
+
+    public function testRecordWithInvalidTimestampIsSkipped(): void
+    {
+        $ts = new \DateTimeImmutable('2024-06-15 08:00:00', new \DateTimeZone('UTC'));
+
+        $binary = (new FitFileBuilder())
+            ->definition(0, 20, [
+                ['num' => 253, 'size' => 4, 'baseType' => self::UINT32],
+                ['num' => 3,   'size' => 1, 'baseType' => self::UINT8],
+            ])
+            ->data(0, [253 => 0xFFFFFFFF, 3 => 150]) // invalid timestamp
+            ->definition(1, 18, [
+                ['num' => 253, 'size' => 4, 'baseType' => self::UINT32],
+                ['num' => 2,   'size' => 4, 'baseType' => self::UINT32],
+                ['num' => 5,   'size' => 1, 'baseType' => self::UINT8],
+            ])
+            ->data(1, [253 => FitFileBuilder::fitTs($ts), 2 => FitFileBuilder::fitTs($ts), 5 => 1])
+            ->build();
+
+        $activity = $this->parser->parse(new StringSource($binary));
+
+        self::assertCount(0, $activity->sessions[0]->records);
+    }
+
+    public function testDeviceInfoPrefersCreatorOverSensors(): void
+    {
+        $deviceInfoDef = [
+            ['num' => 0, 'size' => 1, 'baseType' => self::UINT8],  // device_index
+            ['num' => 1, 'size' => 2, 'baseType' => self::UINT16], // manufacturer
+            ['num' => 5, 'size' => 2, 'baseType' => self::UINT16], // software_version (scale 100)
+        ];
+
+        $binary = (new FitFileBuilder())
+            ->definition(0, 23, $deviceInfoDef) // global=23 (device_info)
+            ->data(0, [0 => 1, 1 => 32])        // sensor first (device_index=1)
+            ->data(0, [0 => 0, 1 => 1, 5 => 950]) // creator: Garmin, sw 9.50
+            ->build();
+
+        $activity = $this->parser->parse(new StringSource($binary));
+
+        self::assertNotNull($activity->device);
+        self::assertSame(Manufacturer::Garmin, $activity->device->manufacturer);
+        self::assertSame('9.50', $activity->device->softwareVersion);
+    }
+
     public function testSkipsUnknownMessageTypes(): void
     {
         // Global message 999 — unknown, should be skipped without exception
@@ -217,6 +308,30 @@ final class FitParserTest extends TestCase
         $activity = $this->parser->parse(new StringSource($binary));
 
         self::assertCount(0, $activity->sessions);
+    }
+
+    public function testRecordsWithoutSessionMessageGetFallbackSession(): void
+    {
+        $t0 = new \DateTimeImmutable('2024-06-15 08:00:00', new \DateTimeZone('UTC'));
+        $t1 = $t0->modify('+10 minutes');
+
+        $binary = (new FitFileBuilder())
+            ->definition(0, 20, [  // record messages, but no session message
+                ['num' => 253, 'size' => 4, 'baseType' => self::UINT32],
+                ['num' => 5,   'size' => 4, 'baseType' => self::UINT32], // distance (cm)
+            ])
+            ->data(0, [253 => FitFileBuilder::fitTs($t0), 5 => FitFileBuilder::distToRaw(0.0)])
+            ->data(0, [253 => FitFileBuilder::fitTs($t1), 5 => FitFileBuilder::distToRaw(2500.0)])
+            ->build();
+
+        $activity = $this->parser->parse(new StringSource($binary));
+
+        self::assertCount(1, $activity->sessions);
+        $session = $activity->sessions[0];
+        self::assertSame(Sport::Generic, $session->sport);
+        self::assertCount(2, $session->records);
+        self::assertSame(600, $session->totalElapsedTime);
+        self::assertEqualsWithDelta(2500.0, $session->totalDistance, 1.0);
     }
 
     public function testMultipleSessions(): void

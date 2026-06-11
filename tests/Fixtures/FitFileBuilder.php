@@ -17,6 +17,7 @@ final class FitFileBuilder
     /** @var array<int, list<array{num:int, size:int, baseType:int}>> localType → field defs */
     private array $definitions = [];
 
+    /** @param list<array{num: int, size: int, baseType: int}> $fields */
     public function definition(int $localType, int $globalNum, array $fields): self
     {
         $this->definitions[$localType] = $fields;
@@ -35,6 +36,7 @@ final class FitFileBuilder
         return $this;
     }
 
+    /** @param array<int, int> $values field number → raw value */
     public function data(int $localType, array $values): self
     {
         // header: bit6=0 (data), bits0-3=localType
