@@ -48,13 +48,24 @@ final class GpxExporter
     {
         $dir = dirname($path);
 
+        error_clear_last();
+
         if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
-            throw new GpxExportException("Cannot create directory: {$dir}");
+            throw new GpxExportException("Cannot create directory: {$dir}" . self::lastErrorSuffix());
         }
 
+        error_clear_last();
+
         if (@file_put_contents($path, $this->export($activity, $options)) === false) {
-            throw new GpxExportException("Failed to write GPX file: {$path}");
+            throw new GpxExportException("Failed to write GPX file: {$path}" . self::lastErrorSuffix());
         }
+    }
+
+    private static function lastErrorSuffix(): string
+    {
+        $error = error_get_last();
+
+        return $error !== null ? " ({$error['message']})" : '';
     }
 
     private function buildTrack(\DOMDocument $dom, Session $session, ExportOptions $options): \DOMElement

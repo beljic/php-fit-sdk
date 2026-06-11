@@ -46,10 +46,11 @@ final class BinaryReader
 
     public function readFloat32(bool $bigEndian = false): float
     {
+        $offset = $this->position;
         $values = unpack($bigEndian ? 'G' : 'g', $this->read(4));
 
         if ($values === false || !is_float($values[1])) {
-            throw new InvalidFitFileException("Failed to decode float at position {$this->position}");
+            throw new InvalidFitFileException("Failed to decode float at position {$offset}");
         }
 
         return $values[1];
@@ -90,7 +91,8 @@ final class BinaryReader
         $values = unpack($format, $bytes);
 
         if ($values === false || !is_int($values[1])) {
-            throw new InvalidFitFileException("Failed to decode integer at position {$this->position}");
+            $offset = $this->position - strlen($bytes);
+            throw new InvalidFitFileException("Failed to decode integer at position {$offset}");
         }
 
         return $values[1];
